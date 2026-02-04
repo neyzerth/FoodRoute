@@ -1,0 +1,12 @@
+[submodule "1-landing"]
+	path = 1-landing
+	url = https://github.com/neyzerth/foodroute_landing-page.git
+[submodule "2-leaflet"]
+	path = 2-leaflet
+	url = https://github.com/neyzerth/foodroute_activity2
+[submodule "3-load"]
+	path = 3-load
+	url = https://github.com/neyzerth/foodroute_activity3
+[submodule "4-accesibilidad"]
+	path = 4-accesibilidad
+	url = https://github.com/neyzerth/foodroute_activity4
