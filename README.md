@@ -2,6 +2,8 @@
 
 > "La guía definitiva de comida callejera y rutas seguras."
 
+[**Visitar Proyecto alojado en *PythonAnywhere***](https://neyzerth.pythonanywhere.com/map)
+
 ## 🚀 Cómo correrlo
 
 Sigue estos pasos para ejecutar la aplicación localmente:
