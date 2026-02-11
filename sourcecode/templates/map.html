@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodRoute - Explorador</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            orange: '#FF6B00',
+                            dark: '#0F172A',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Ajustes Leaflet */
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem;
+            padding: 0;
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            width: 200px !important;
+        }
+
+        /* Animación Toast */
+        @keyframes slideIn {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .toast-enter {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        /* Scrollbar personalizada para la lista */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+
+    <!-- 1. Navbar Global -->
+    <nav class="bg-white shadow-sm z-50 h-16 flex-none flex items-center justify-between px-4 border-b border-gray-200">
+        <div class="flex items-center gap-2">
+            <div class="bg-brand-orange p-1.5 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </div>
+            <span class="font-bold text-xl text-brand-dark tracking-tight">Food<span
+                    class="text-brand-orange">Route</span></span>
+        </div>
+    </nav>
+
+    <!-- 2. Controles de Pestañas (Solo visibles en Móvil) -->
+    <div class="flex md:hidden bg-white border-b border-gray-200 text-sm font-medium text-center text-gray-500"
+        role="tablist">
+        <button id="tab-map" onclick="switchTab('map')"
+            class="w-1/2 p-4 text-brand-orange border-b-2 border-brand-orange active-tab focus:outline-none" role="tab"
+            aria-selected="true">
+            <span class="flex items-center justify-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0121 18.382V7.618a1 1 0 01-.806-.984l-4.647-2.324A1 1 0 0115 5.236V16.382m-6-1.553l6-3">
+                    </path>
+                </svg> Mapa</span>
+        </button>
+        <button id="tab-list" onclick="switchTab('list')"
+            class="w-1/2 p-4 hover:text-gray-600 focus:outline-none border-b-2 border-transparent" role="tab"
+            aria-selected="false">
+            <span class="flex items-center justify-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                    </path>
+                </svg> Lugares (<span id="count-badge">0</span>)</span>
+        </button>
+    </div>
+
+    <!-- 3. Contenedor Principal (Grid en Desktop, Stack en Móvil) -->
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- COLUMNA A: Lista de Lugares -->
+        <!-- En móvil: hidden por defecto (tab inactivo). En desktop: block y ancho fijo -->
+        <aside id="view-list"
+            class="hidden md:block w-full md:w-1/3 lg:w-1/4 bg-white border-r border-gray-200 overflow-y-auto custom-scroll h-full z-10 absolute md:relative inset-0 md:inset-auto">
+            <div class="p-4 border-b border-gray-100 bg-gray-50/50 sticky top-0 backdrop-blur-sm">
+                <h2 class="font-bold text-gray-800 text-lg">Tus Descubrimientos</h2>
+                <p class="text-xs text-gray-500">Lugares guardados en esta sesión</p>
+            </div>
+
+            <!-- Contenedor de items -->
+            <ul id="places-list" class="divide-y divide-gray-100 p-2 space-y-2">
+                <!-- Estado vacío inicial -->
+                <li id="empty-state" class="text-center py-12 text-gray-400">
+                    <svg class="w-12 h-12 mx-auto mb-3 opacity-20" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z">
+                        </path>
+                    </svg>
+                    <p class="text-sm">Aún no has guardado lugares.</p>
+                    <p class="text-xs mt-1">Toca el mapa para agregar uno.</p>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- COLUMNA B: Mapa -->
+        <!-- En móvil: block por defecto. En desktop: flex-1 (ocupa el resto) -->
+        <main id="view-map" class="w-full h-full md:flex-1 bg-gray-100 relative z-0">
+            <div id="map" class="w-full h-full"></div>
+        </main>
+
+    </div>
+
+    <!-- Componente Toast -->
+    <div id="toast"
+        class="hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-xl z-[2000] flex items-center gap-3 transition-all min-w-[200px] justify-center text-sm">
+        <svg id="toast-spinner" class="animate-spin h-4 w-4 text-brand-orange hidden" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+            </path>
+        </svg>
+        <svg id="toast-check" class="h-4 w-4 text-green-400 hidden" fill="none" stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span id="toast-message">Notificación</span>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // --- 1. CONFIGURACIÓN DEL MAPA ---
+        var map = L.map('map', { zoomControl: false }).setView([32.5149, -117.0382], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // Añadir control de zoom
+        const zoomControl = L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // --- 2. ACCESIBILIDAD (ARIA LABELS) ---
+        // Esperamos a que el DOM se renderice y buscamos los botones creados por Leaflet
+        setTimeout(() => {
+            const zoomInBtn = document.querySelector('.leaflet-control-zoom-in');
+            const zoomOutBtn = document.querySelector('.leaflet-control-zoom-out');
+
+            if (zoomInBtn) {
+                zoomInBtn.setAttribute('aria-label', 'Acercar mapa');
+                zoomInBtn.title = "Acercar mapa"; // Tooltip nativo
+            }
+            if (zoomOutBtn) {
+                zoomOutBtn.setAttribute('aria-label', 'Alejar mapa');
+                zoomOutBtn.title = "Alejar mapa"; // Tooltip nativo
+            }
+        }, 500); // Pequeño delay para asegurar que Leaflet inyectó el HTML
+
+
+        // --- 3. ESTADO DE LA APLICACIÓN ---
+        let tempMarker = null;
+        let savedPlaces = []; // Array local para guardar los puntos
+
+        // Estado para Rutas
+        let isRouteMode = false;
+        let currentRoutePoints = [];
+        let currentRoutePolyline = null;
+        let currentRouteDecorator = null;
+        let tempRouteMarker = null; // Marcador flotante para el siguiente punto
+        let savedRoutes = [];
+
+        // --- 4. GESTIÓN DE TABS (MÓVIL) ---
+        function switchTab(tab) {
+            const mapContainer = document.getElementById('view-map');
+            const listContainer = document.getElementById('view-list');
+            const tabMap = document.getElementById('tab-map');
+            const tabList = document.getElementById('tab-list');
+
+            if (tab === 'map') {
+                // Mostrar Mapa
+                mapContainer.classList.remove('hidden');
+                listContainer.classList.add('hidden');
+
+                // Estilos Tab
+                tabMap.classList.add('text-brand-orange', 'border-brand-orange');
+                tabMap.classList.remove('border-transparent', 'text-gray-500');
+                tabList.classList.remove('text-brand-orange', 'border-brand-orange');
+                tabList.classList.add('border-transparent', 'text-gray-500');
+
+                // RECALCULAR TAMAÑO MAPA (Crucial cuando estaba oculto)
+                setTimeout(() => { map.invalidateSize(); }, 100);
+
+            } else {
+                // Mostrar Lista
+                mapContainer.classList.add('hidden');
+                listContainer.classList.remove('hidden'); // En móvil ocupa todo
+
+                // Estilos Tab
+                tabList.classList.add('text-brand-orange', 'border-brand-orange');
+                tabList.classList.remove('border-transparent', 'text-gray-500');
+                tabMap.classList.remove('text-brand-orange', 'border-brand-orange');
+                tabMap.classList.add('border-transparent', 'text-gray-500');
+            }
+        }
+
+        // --- 4.5 CONTROLES DE RUTA (UI) ---
+        // Insertar botón de "Nueva Ruta" en el mapa
+        const routeControlDiv = L.Control.extend({
+            onAdd: function (map) {
+                const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                div.style.backgroundColor = 'white';
+                div.style.padding = '5px';
+                div.style.cursor = 'pointer';
+                div.innerHTML = `
+                    <button id="btn-start-route" class="flex items-center gap-2 px-2 py-1 text-sm font-bold text-gray-700 hover:text-brand-orange">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                        <span class="hidden md:inline">Nueva Ruta</span>
+                    </button>
+                    <div id="route-actions" class="hidden flex gap-2 mt-1 border-t pt-1">
+                        <button id="btn-finish-route" class="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">Guardar</button>
+                        <button id="btn-cancel-route" class="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Cancelar</button>
+                    </div>
+                `;
+
+                // Evitar que los clics en el control se propaguen al mapa
+                L.DomEvent.disableClickPropagation(div);
+                return div;
+            }
+        });
+
+        map.addControl(new routeControlDiv({ position: 'topright' }));
+
+        // Listeners para los botones de ruta (delegados o directos tras inserción)
+        setTimeout(() => {
+            document.getElementById('btn-start-route').onclick = startRouteMode;
+            document.getElementById('btn-finish-route').onclick = finishRoute;
+            document.getElementById('btn-cancel-route').onclick = cancelRoute;
+        }, 500);
+
+        function startRouteMode() {
+            if (isRouteMode) return;
+            isRouteMode = true;
+            currentRoutePoints = [];
+
+            // UI Updates
+            document.getElementById('btn-start-route').classList.add('text-brand-orange');
+            document.getElementById('route-actions').classList.remove('hidden');
+            document.getElementById('route-actions').classList.add('flex');
+
+            map.getContainer().style.cursor = 'crosshair';
+            showToast('Modo Ruta: Toca el mapa para añadir puntos', 'loading'); // Usamos 'loading' para icono info
+        }
+
+        function cancelRoute() {
+            isRouteMode = false;
+            currentRoutePoints = [];
+
+            if (currentRoutePolyline) map.removeLayer(currentRoutePolyline);
+            if (currentRouteDecorator) map.removeLayer(currentRouteDecorator);
+            if (tempRouteMarker) map.removeLayer(tempRouteMarker);
+
+            currentRoutePolyline = null;
+            currentRouteDecorator = null;
+            tempRouteMarker = null;
+
+            // UI UIpdates
+            document.getElementById('btn-start-route').classList.remove('text-brand-orange');
+            document.getElementById('route-actions').classList.add('hidden');
+            document.getElementById('route-actions').classList.remove('flex');
+            map.getContainer().style.cursor = '';
+
+            showToast('Ruta cancelada', 'error');
+        }
+
+        function finishRoute() {
+            if (currentRoutePoints.length < 2) {
+                showToast('Necesitas al menos 2 puntos', 'error');
+                return;
+            }
+
+            isRouteMode = false;
+
+            // Guardar ruta
+            const routeData = {
+                id: Date.now(),
+                points: [...currentRoutePoints],
+                count: currentRoutePoints.length,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            savedRoutes.unshift(routeData);
+
+            // Mantener la visualización visual pero "finalizada" (quizás opacidad o color fijo)
+            // Para esta demo, dejamos la polilinea tal cual o la recreamos como objeto permanente
+            // Clonamos la polilínea visual para dejarla en el mapa
+            // La actual (currentRoutePolyline) ya está en el mapa, solo la desvinculamos de la variable "current"
+
+            // Agregar a lista de "Guardados" (mezclado con lugares por ahora, o sección separada)
+            // Para simplificar, lo añadimos a savedPlaces como tipo 'route' y re-renderizamos
+            savedPlaces.unshift({
+                ...routeData,
+                type: 'route',
+                lat: currentRoutePoints[0][0], // Usar primer punto para centrar
+                lng: currentRoutePoints[0][1]
+            });
+
+            // Limpiar estado "current" pero NO borrar capas del mapa (para que se vean)
+            currentRoutePolyline = null;
+            currentRouteDecorator = null;
+            if (tempRouteMarker) {
+                map.removeLayer(tempRouteMarker);
+                tempRouteMarker = null;
+            }
+
+            // UI Updates
+            document.getElementById('btn-start-route').classList.remove('text-brand-orange');
+            document.getElementById('route-actions').classList.add('hidden');
+            document.getElementById('route-actions').classList.remove('flex');
+            map.getContainer().style.cursor = '';
+
+            showToast('Ruta guardada', 'success');
+            renderList();
+        }
+
+        // --- 5. INTERACCIÓN MAPA ---
+        map.on('click', function (e) {
+            const { lat, lng } = e.latlng;
+
+            if (isRouteMode) {
+                // LÓGICA DE RUTA
+                currentRoutePoints.push([lat, lng]);
+
+                // Dibujar/Actualizar Polilínea
+                if (!currentRoutePolyline) {
+                    // Crear nueva
+                    currentRoutePolyline = L.polyline(currentRoutePoints, {
+                        color: '#FF6B00',
+                        weight: 6,
+                        opacity: 0.8,
+                        lineCap: 'round'
+                    }).addTo(map);
+
+                    // Decorador (Línea punteada blanca encima)
+                    // Nota: Leaflet base no soporta multiples strokes nativos facilmente en una sola Polyline,
+                    // pero podemos agregar una segunda polilínea encima.
+                    currentRouteDecorator = L.polyline(currentRoutePoints, {
+                        color: 'white',
+                        weight: 2,
+                        dashArray: '5, 10',
+                        opacity: 0.8
+                    }).addTo(map);
+
+                } else {
+                    // Actualizar existentes
+                    currentRoutePolyline.setLatLngs(currentRoutePoints);
+                    currentRouteDecorator.setLatLngs(currentRoutePoints);
+                }
+
+                // Añadir un pequeño punto en cada nodo
+                L.circleMarker([lat, lng], {
+                    radius: 4,
+                    fillColor: 'white',
+                    color: '#FF6B00',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(map);
+
+                return; // Salir, no crear popup de lugar
+            }
+
+            // LÓGICA DE LUGAR (si no estamos en modo ruta)
+            if (tempMarker) map.removeLayer(tempMarker);
+
+            // Crear UI del Popup
+            const container = document.createElement('div');
+            container.className = "text-center p-3";
+
+            // Se rellenará tras bindear
+            tempMarker = L.marker([lat, lng]).addTo(map);
+
+            // Forzamos contenido DOM
+            const title = document.createElement('h3'); title.className = "font-bold text-gray-800 text-sm mb-1"; title.innerText = "Nuevo Punto";
+            const p = document.createElement('p'); p.className = "text-xs text-gray-500 mb-3"; p.innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            const divBtns = document.createElement('div'); divBtns.className = "flex gap-2 justify-center";
+
+            const btnCancel = document.createElement('button'); btnCancel.innerText = "Cancelar"; btnCancel.className = "bg-gray-100 px-3 py-1 rounded text-xs font-bold hover:bg-gray-200";
+            const btnSave = document.createElement('button'); btnSave.innerText = "Guardar"; btnSave.className = "bg-brand-orange text-white px-3 py-1 rounded text-xs font-bold hover:bg-orange-600 shadow-md";
+
+            btnCancel.onclick = () => { map.removeLayer(tempMarker); tempMarker = null; };
+            btnSave.onclick = () => guardarPunto(lat, lng);
+
+            divBtns.append(btnCancel, btnSave);
+            container.append(title, p, divBtns);
+
+            tempMarker.bindPopup(container).openPopup();
+        });
+
+        // --- 6. LÓGICA DE GUARDADO ---
+        async function guardarPunto(lat, lng) {
+            tempMarker.closePopup();
+            showToast('Guardando...', 'loading');
+
+            // Simulación de delay y red
+            const delay = new Promise(r => setTimeout(r, 600));
+
+            try {
+                // Aquí iría el fetch real. Simulamos éxito siempre para la demo UI.
+                await delay;
+                // const res = await fetch('/guardar_punto', ...); 
+
+                // ÉXITO:
+                showToast('¡Guardado en lista!', 'success');
+
+                // A. Hacer marcador permanente
+                tempMarker.setIcon(new L.Icon.Default({ className: 'hue-rotate-90' }));
+                tempMarker = null;
+
+                // B. Agregar a la lista local
+                const newPlace = {
+                    id: Date.now(),
+                    type: 'place',
+                    lat: lat,
+                    lng: lng,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                savedPlaces.unshift(newPlace); // Agregar al inicio
+
+                // C. Actualizar UI de Lista
+                renderList();
+
+            } catch (err) {
+                showToast('Error al guardar', 'error');
+            }
+        }
+
+        // --- 7. RENDERIZADO DE LA LISTA ---
+        function renderList() {
+            const listEl = document.getElementById('places-list');
+            const emptyState = document.getElementById('empty-state');
+            const badge = document.getElementById('count-badge');
+
+            // Actualizar contador
+            badge.innerText = savedPlaces.length;
+
+            if (savedPlaces.length > 0) {
+                if (emptyState) emptyState.remove(); // Quitar mensaje de vacío
+            }
+
+            // Limpiar lista actual y regenerar (o prependear el último, aquí regeneramos por simpleza)
+            listEl.innerHTML = '';
+
+            savedPlaces.forEach(item => {
+                const li = document.createElement('li');
+                li.className = "bg-white border border-gray-200 rounded-lg p-3 hover:border-brand-orange transition-colors cursor-pointer group shadow-sm";
+                li.onclick = () => {
+                    // Al hacer click en la lista, centrar mapa en ese punto
+                    // Si estamos en móvil, cambiar tab primero
+                    if (window.innerWidth < 768) switchTab('map');
+
+                    if (item.type === 'route') {
+                        map.fitBounds(item.points);
+                    } else {
+                        map.setView([item.lat, item.lng], 16);
+                    }
+                };
+
+                // Diferenciar Icono/Texto según tipo
+                let iconHtml = '';
+                let titleText = '';
+
+                if (item.type === 'route') {
+                    iconHtml = `<svg class="w-4 h-4 text-brand-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>`;
+                    titleText = `Ruta #${item.id.toString().slice(-4)} (${item.count} ptos)`;
+                } else {
+                    iconHtml = `<svg class="w-4 h-4 text-gray-400 group-hover:text-brand-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`;
+                    titleText = `Marcador #${item.id.toString().slice(-4)}`;
+                }
+
+                li.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex gap-2 items-start">
+                           <div class="mt-0.5">${iconHtml}</div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-sm group-hover:text-brand-orange">${titleText}</h4>
+                                <p class="text-xs text-gray-500 mt-1 font-mono bg-gray-50 inline-block px-1 rounded">
+                                    ${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}
+                                </p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-gray-400 font-medium">${item.time}</span>
+                    </div>
+                `;
+                listEl.appendChild(li);
+            });
+        }
+
+        // --- 8. UI HELPER (TOAST) ---
+        let toastTimeout;
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            const txt = document.getElementById('toast-message');
+            const spin = document.getElementById('toast-spinner');
+            const chk = document.getElementById('toast-check');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            txt.innerText = msg;
+            spin.classList.add('hidden'); chk.classList.add('hidden');
+
+            if (type === 'loading') spin.classList.remove('hidden');
+            if (type === 'success') {
+                chk.classList.remove('hidden');
+                toastTimeout = setTimeout(() => {
+                    toast.classList.add('hidden');
+                    toast.classList.remove('toast-enter');
+                }, 2000);
+            }
+            toast.classList.remove('hidden');
+            toast.classList.add('toast-enter');
+        }
+    </script>
+</body>
+
+</html>
